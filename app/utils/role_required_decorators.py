@@ -36,7 +36,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         )
 
 
-async def role_required(role: str):
+def role_required(role: str):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -46,7 +46,7 @@ async def role_required(role: str):
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
                 )
 
-            user = get_current_user(token)
+            user = await get_current_user(token)
 
             if user["role"] != role:
                 raise HTTPException(
