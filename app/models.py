@@ -17,7 +17,7 @@ class User:
         self.password = password  # Hashed password will be stored here
         self.role = role
         self.created_at = created_at or datetime.now(timezone.utc)
-        self.updated_at = updated_at or datetime.now(timezone.utc)
+        self.updated_at = updated_at or None
         self.deleted = deleted
 
     def to_dict(self):
