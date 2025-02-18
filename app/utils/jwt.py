@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone, timedelta
 
 from jose import JWTError, jwt
@@ -13,11 +12,11 @@ ALGORITHM = settings.ALGORITHM
 def generate_access_token(user_data: dict):
     expire = datetime.now(timezone.utc) + timedelta(minutes=30)
     payload = {
-        "sub":str(user_data["_id"]),
+        "sub": str(user_data["_id"]),
         "username": user_data["username"],
         "role": user_data["role"],
         "iat": datetime.now(timezone.utc),
-        "exp": expire
+        "exp": expire,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -39,6 +38,11 @@ def decode_token(token: str):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
-        raise HTTPException(status_code=401, detail="Token is invalid or expired.")
+        raise HTTPException(
+            status_code=401, detail="Token is invalid or expired."
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred while decoding the token: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while decoding the token: {e}",
+        )

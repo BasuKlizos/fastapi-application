@@ -35,6 +35,7 @@ class User:
     def from_dict(data):
         return User(**data)
 
+
 class Trash:
     def __init__(self, original_user_id, deleted_by, reason=None):
         self.original_user_id = original_user_id

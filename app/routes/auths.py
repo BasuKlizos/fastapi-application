@@ -17,7 +17,9 @@ auth_routes = APIRouter(prefix="/auth")
 
 
 @auth_routes.post(
-    "/user/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+    "/user/signup",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 async def user_signup(user_create: UserCreate):
     try:
@@ -43,7 +45,9 @@ async def user_signup(user_create: UserCreate):
         new_user = User(**user_dict)
         user_result = await users_collection.insert_one(new_user.to_dict())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error inserting user: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error inserting user: {str(e)}"
+        )
 
     user_response = UserResponse(
         msg="User created successfully",
@@ -61,7 +65,9 @@ async def user_signup(user_create: UserCreate):
 
 
 @auth_routes.post(
-    "/admin/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+    "/admin/signup",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 async def admin_signup(admin_create: AdminCreate):
 
@@ -87,7 +93,9 @@ async def admin_signup(admin_create: AdminCreate):
     try:
         admin_dict = admin_create.model_dump()
         new_admin_user = User(**admin_dict)
-        admin_result = await users_collection.insert_one(new_admin_user.to_dict())
+        admin_result = await users_collection.insert_one(
+            new_admin_user.to_dict()
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -115,13 +123,17 @@ async def admin_signup(admin_create: AdminCreate):
 async def login(user_login: LoginRequest):
 
     try:
-        user = await UserValidation.get_user_by_email_or_username(user_login.email_or_username)
+        user = await UserValidation.get_user_by_email_or_username(
+            user_login.email_or_username
+        )
         # print("-------------------------------------------------------------------")
         # print(user)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        await UserValidation.verify_user_password(user["password"], user_login.password)
+        await UserValidation.verify_user_password(
+            user["password"], user_login.password
+        )
 
         access_token = generate_access_token(user)
 

@@ -39,7 +39,11 @@ async def get_all_users(
 ):
     try:
         users, total_users = await UserAuthorization.get_users(
-            page=page, page_size=page_size, username=username, email=email, role=role
+            page=page,
+            page_size=page_size,
+            username=username,
+            email=email,
+            role=role,
         )
         # response = []
 
@@ -67,7 +71,9 @@ async def get_all_users(
             "users": users,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching users: {str(e)}"
+        )
 
 
 @users_route.get("/get-user/{user_id}", status_code=status.HTTP_200_OK)
@@ -96,12 +102,16 @@ async def get_user_by_id(user_id: str, token: str = Depends(oauth2_scheme)):
     except Exception as http_exc:
         raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching user: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching user: {str(e)}"
+        )
 
 
 @users_route.put("/update-user/{user_id}", status_code=status.HTTP_200_OK)
 async def user_update_by_id(
-    user_id: str, user_data: UserUpdateRequest, token: str = Depends(oauth2_scheme)
+    user_id: str,
+    user_data: UserUpdateRequest,
+    token: str = Depends(oauth2_scheme),
 ):
 
     user = await UserAuthorization.get_user_by_id(user_id)
@@ -131,18 +141,23 @@ async def user_update_by_id(
 
     if result.modified_count == 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="User update failed"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User update failed",
         )
 
     return {"message": "User updated successfully"}
 
 
 @users_route.delete(
-    "/delete/{user_id}", response_model=TrashResponse, status_code=status.HTTP_200_OK
+    "/delete/{user_id}",
+    response_model=TrashResponse,
+    status_code=status.HTTP_200_OK,
 )
 @role_required("admin")
 async def delete_user_by_id(
-    user_id: str, token: str = Depends(oauth2_scheme), reason: Optional[str] = None
+    user_id: str,
+    token: str = Depends(oauth2_scheme),
+    reason: Optional[str] = None,
 ):
     try:
         current_user = await get_current_user(token)
@@ -157,7 +172,9 @@ async def delete_user_by_id(
             )
 
         trash_data = Trash(
-            original_user_id=user_id, deleted_by=current_user["username"], reason=reason
+            original_user_id=user_id,
+            deleted_by=current_user["username"],
+            reason=reason,
         )
 
         trash_data_dict = trash_data.to_dict()
@@ -165,7 +182,12 @@ async def delete_user_by_id(
 
         await users_collection.update_one(
             {"_id": ObjectId(user_id)},
-            {"$set": {"deleted": True, "updated_at": datetime.now(timezone.utc)}},
+            {
+                "$set": {
+                    "deleted": True,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
         )
 
         trash_response = TrashResponse(
@@ -183,7 +205,9 @@ async def delete_user_by_id(
     except Exception as http_exc:
         raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching user: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching user: {str(e)}"
+        )
 
 
 @users_route.post("/batch-delete", status_code=status.HTTP_200_OK)
@@ -202,11 +226,15 @@ async def batch_delete_users(
     # Convert user_ids from string to ObjectId
     object_ids = [ObjectId(user_id) for user_id in user_ids]
 
-    users_cursor = users_collection.find({"_id": {"$in": object_ids}, "deleted": False})
+    users_cursor = users_collection.find(
+        {"_id": {"$in": object_ids}, "deleted": False}
+    )
 
     users = await users_cursor.to_list(length=100)
     if not users:
-        raise HTTPException(status_code=404, detail="No users found for deletion")
+        raise HTTPException(
+            status_code=404, detail="No users found for deletion"
+        )
 
     # Soft delete users and move them to trash collection
     for user in users:
@@ -244,7 +272,8 @@ async def view_trash(token: str = Depends(oauth2_scheme)):
 
         if not trashed_users:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="No trashed users found."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No trashed users found.",
             )
 
         response_trashed_users = []
@@ -271,10 +300,13 @@ async def view_trash(token: str = Depends(oauth2_scheme)):
 @role_required("admin")
 async def restore_user(user_id: str, token: str = Depends(oauth2_scheme)):
 
-    trash_user = await trash_collections.find_one({"original_user_id": user_id})
+    trash_user = await trash_collections.find_one(
+        {"original_user_id": user_id}
+    )
     if not trash_user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found in trash"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in trash",
         )
 
     result = await users_collection.update_one(
@@ -294,14 +326,15 @@ async def restore_user(user_id: str, token: str = Depends(oauth2_scheme)):
 
 @users_route.delete("/trash/{user_id}", status_code=status.HTTP_200_OK)
 @role_required("admin")
-async def permanent_delete_user(user_id: str, token: str = Depends(oauth2_scheme)):
+async def permanent_delete_user(
+    user_id: str, token: str = Depends(oauth2_scheme)
+):
 
-    trash_user = await trash_collections.find_one(
-        {"_id": ObjectId(user_id)}
-    )
+    trash_user = await trash_collections.find_one({"_id": ObjectId(user_id)})
     if not trash_user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found in trash"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in trash",
         )
 
     await trash_collections.delete_one({"_id": ObjectId(user_id)})

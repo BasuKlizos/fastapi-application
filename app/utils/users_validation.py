@@ -14,18 +14,29 @@ class UserValidation:
     @classmethod
     async def is_user_exists(cls, username: str = None, email: str = None):
         if username:
-            user_by_username = await users_collection.find_one({"username": username})
+            user_by_username = await users_collection.find_one(
+                {"username": username}
+            )
             if user_by_username:
-                raise HTTPException(status_code=400, detail="Username already exists")
+                raise HTTPException(
+                    status_code=400, detail="Username already exists"
+                )
         if email:
             user_by_email = await users_collection.find_one({"email": email})
             if user_by_email:
-                raise HTTPException(status_code=400, detail="Email already exists")
+                raise HTTPException(
+                    status_code=400, detail="Email already exists"
+                )
 
     @classmethod
     async def get_user_by_email_or_username(cls, email_or_username: str):
         user = await users_collection.find_one(
-            {"$or": [{"email": email_or_username}, {"username": email_or_username}]}
+            {
+                "$or": [
+                    {"email": email_or_username},
+                    {"username": email_or_username},
+                ]
+            }
         )
 
         if not user:

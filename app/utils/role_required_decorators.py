@@ -29,7 +29,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
         return user
-    except JWTError as e:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -43,7 +43,8 @@ def role_required(role: str):
             token = kwargs.get("token", None)
             if not token:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Not authenticated",
                 )
 
             user = await get_current_user(token)
@@ -51,7 +52,10 @@ def role_required(role: str):
             if user["role"] != role:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"You do not have the required '{role}' role to access this resource.",
+                    detail=(
+                            f"You do not have the required '{role}' role "
+                            "to access this resource."
+                        ),
                 )
 
             # Call the original function
@@ -60,3 +64,5 @@ def role_required(role: str):
         return wrapper
 
     return decorator
+
+

@@ -45,7 +45,9 @@ class UserAuthorization:
     @classmethod
     async def get_user_by_id(cls, user_id: str):
         if not ObjectId.is_valid(user_id):
-            raise HTTPException(status_code=400, detail="Invalid user ID format")
+            raise HTTPException(
+                status_code=400, detail="Invalid user ID format"
+            )
 
         user = await users_collection.find_one(
             {"$and": [{"_id": ObjectId(user_id)}, {"deleted": False}]}
