@@ -34,3 +34,22 @@ class User:
     @staticmethod
     def from_dict(data):
         return User(**data)
+
+class Trash:
+    def __init__(self, original_user_id, deleted_by, reason=None):
+        self.original_user_id = original_user_id
+        self.deleted_at = datetime.now(timezone.utc)
+        self.deleted_by = deleted_by
+        self.reason = reason
+
+    def to_dict(self):
+        return {
+            "original_user_id": self.original_user_id,
+            "deleted_at": self.deleted_at,
+            "deleted_by": self.deleted_by,
+            "reason": self.reason,
+        }
+
+    @staticmethod
+    def from_dict(data):
+        return Trash(**data)

@@ -1,3 +1,5 @@
+from bson.objectid import ObjectId
+
 from fastapi import HTTPException
 
 from app.database import users_collection
@@ -39,3 +41,19 @@ class UserAuthorization:
             raise HTTPException(
                 status_code=500, detail=f"Error fetching users: {str(e)}"
             )
+
+    @classmethod
+    async def get_user_by_id(cls, user_id: str):
+        if not ObjectId.is_valid(user_id):
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+
+        user = await users_collection.find_one(
+            {"$and": [{"_id": ObjectId(user_id)}, {"deleted": False}]}
+        )
+        # print("*********************************")
+        # print(user)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return user
