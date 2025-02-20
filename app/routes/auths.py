@@ -29,7 +29,7 @@ async def user_signup(user_create: UserCreate):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User exists or validation failed: {str(e)}",
+            detail=f"User exists or validation failed: {str(e)}",   
         )
 
     try:
@@ -57,8 +57,7 @@ async def user_signup(user_create: UserCreate):
             email=user_dict["email"],
             role=user_dict["role"],
             created_at=user_dict["created_at"],
-        ),
-        access_token=None,  # Make sure this is explicitly set to None
+        )
     )
     user_response_dict = user_response.model_dump()
     return user_response_dict

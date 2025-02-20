@@ -1,0 +1,30 @@
+# services:
+#   flask-app:
+#     build: .
+#     container_name: flask_app_container
+#     ports:
+#       - "5000:5000"
+#     environment:
+#       - MONGO_USERNAME=${MONGO_USERNAME}
+#       - MONGO_PASSWORD=${MONGO_PASSWORD}
+#       - MONGO_CLUSTER=${MONGO_CLUSTER}
+#       - MONGO_DB=${MONGO_DB}
+#       - MONGO_URI=${MONGO_URI}
+#       - SECRET_KEY=${SECRET_KEY}
+#       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+#     depends_on:
+#       - mongo
+#     networks:
+#       - flask-network
+
+#   mongo:
+#     image: mongo:latest
+#     container_name: mongo_db_container
+#     ports:
+#       - "27017:27017"
+#     networks:
+#       - flask-network
+
+# networks:
+#   flask-network:
+#     driver: bridge
