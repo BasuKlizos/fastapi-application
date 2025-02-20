@@ -1,8 +1,9 @@
 from fastapi import FastAPI, status
 
 from app.routes import auths, users
+from app.redis.redis import lifespan
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(auths.auth_routes)
 app.include_router(users.users_route)
