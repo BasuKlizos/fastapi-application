@@ -1,7 +1,8 @@
+import json
 from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
-from fastapi import APIRouter, Depends, status, HTTPException, Query
+from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks, Request
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import JSONResponse
 from app.utils.role_required_decorators import role_required
@@ -19,6 +20,7 @@ from app.schemas.schemas import (
     TrashedUserResponse,
 )
 from app.utils.hashing import hash_password
+from app.utils.celery_tasks import CeleryTasks
 
 users_route = APIRouter(prefix="/user")
 
@@ -250,33 +252,31 @@ async def batch_delete_users(
     status_code=status.HTTP_200_OK,
 )
 @role_required("admin")
-async def view_trash(token: str = Depends(oauth2_scheme)):
+async def view_trash(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """Fetch trashed users, using Redis cache if available."""
     try:
-        trashed_users_cursor = trash_collections.find()
-        trashed_users = await trashed_users_cursor.to_list(
-            length=100
-        )  # Limit to 100 users for performance
-        print("---------------------------------------")
-        print(trashed_users)
+        redis_client = request.app.state.redis_client
 
-        if not trashed_users:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No trashed users found.",
-            )
+        cached_trash_data = await redis_client.get("redis_trashed_users")
+        # print("---------------------------------------------")
+        # print(cached_trash_data)
+        if cached_trash_data:
+            return json.loads(cached_trash_data)
 
-        response_trashed_users = []
-        for trashed_user in trashed_users:
-            user_data = {
-                "id": str(trashed_user["_id"]),
-                "original_user_id": trashed_user["original_user_id"],
-                "deleted_at": trashed_user["deleted_at"],
-                "deleted_by": trashed_user["deleted_by"],
-                "reason": trashed_user["reason"],
-            }
-            response_trashed_users.append(user_data)
-
-        return response_trashed_users
+        # Trigger Celery task to fetch and cache trashed users
+        task = CeleryTasks.fetch_trashed_users.apply_async()
+        background_tasks.add_task(CeleryTasks.fetch_trashed_users.apply_async)
+        return JSONResponse(
+            content={
+                "message": "Fetching trashed users in the background",
+                "task_id": task.id,
+            },
+            status_code=status.HTTP_202_ACCEPTED,
+        )
 
     except Exception as e:
         raise HTTPException(
@@ -287,28 +287,15 @@ async def view_trash(token: str = Depends(oauth2_scheme)):
 
 @users_route.post("/restore/{user_id}", status_code=status.HTTP_200_OK)
 @role_required("admin")
-async def restore_user(user_id: str, token: str = Depends(oauth2_scheme)):
+async def restore_user(
+    user_id: str,
+    token: str = Depends(oauth2_scheme),
+    backgroud_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Trigger user restoration in the background."""
+    task = CeleryTasks.restore_user_from_trash_task.apply_async(args=[user_id])
 
-    trash_user = await trash_collections.find_one({"original_user_id": user_id})
-    if not trash_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found in trash",
-        )
-
-    result = await users_collection.update_one(
-        {"_id": ObjectId(user_id)}, {"$set": {"deleted": False}}
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found or already restored",
-        )
-
-    await trash_collections.delete_one({"original_user_id": user_id})
-
-    return JSONResponse(content={"message": "User restored successfully"})
+    return JSONResponse(content={"message": "Restoration started", "task_id": task.id})
 
 
 @users_route.delete("/trash/{user_id}", status_code=status.HTTP_200_OK)
