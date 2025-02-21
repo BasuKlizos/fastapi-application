@@ -31,7 +31,8 @@ from app.schemas.schemas import (
     TrashedUserResponse,
 )
 from app.utils.hashing import hash_password
-from app.utils.celery_tasks import CeleryTasks 
+from app.utils import celery_tasks
+from app.utils.redis_dependencies import get_redis_client
 
 users_route = APIRouter(prefix="/user")
 
@@ -256,14 +257,6 @@ async def batch_delete_users(
     return {"message": f"Successfully soft-deleted {len(users)} users"}
 
 
-def get_redis_client(request: Request) -> Redis:
-    redis_client = request.app.state.redis_client
-    if not redis_client:
-        raise RuntimeError("Redis client is not initialized!")
-
-    return redis_client
-
-
 # I will update this route later
 @users_route.get(
     "/view-trash",
@@ -283,7 +276,7 @@ async def view_trash(
         if cached_trashed_users:
             return JSONResponse(content=json.loads(cached_trashed_users))
 
-        result = CeleryTasks.fetch_trashed_users.delay()
+        result = celery_tasks.fetch_trashed_users.delay()
         data = result.get(timeout=10)
         # print(data)
 
@@ -303,24 +296,22 @@ async def view_trash(
 async def restore_user(
     user_id: str,
     token: str = Depends(oauth2_scheme),
-    redis:Redis = Depends(get_redis_client)
+    redis: Redis = Depends(get_redis_client),
 ):
-    # try:
-        cached_trashed_users = await redis.get("")
-        user = await trash_collections.find_one({"original_user_id": user_id})
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User doesn't exists."
-            )
+    cached_trashed_users = await redis.get("trashed_users")
 
-        await users_collection.update_one(
-            {"_id": ObjectId(user_id)}, {"$set": {"deleted_at": False}}
-        )
-        await trash_collections.delete_one(
-            {"original_user_id": user.get("original_user_id")}
-        )
+    if cached_trashed_users:
+        cached_users = json.loads(cached_trashed_users)
+        if not any(user["original_user_id"] == user_id for user in cached_users):
+            raise HTTPException(status_code=404, detail="User doesn't exist.")
 
-        return JSONResponse(content={"msg": "User restored successfully."})
+    # Dispatch Celery task to restore user
+    task = celery_tasks.restore_user_task.delay(user_id)
+
+    return JSONResponse(
+        content={"msg": "User restoration initiated.", "task_id": task.id},
+        status_code=status.HTTP_202_ACCEPTED,
+    )
 
 
 @users_route.delete("/trash/{user_id}", status_code=status.HTTP_200_OK)
