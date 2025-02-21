@@ -1,15 +1,26 @@
 import json
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
-from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    status,
+    HTTPException,
+    Query,
+    Request,
+)
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from app.utils.role_required_decorators import role_required
 from bson.objectid import ObjectId
+from redis.asyncio import Redis
 
 from app.database import users_collection, trash_collections
 from app.utils.users_authorization import UserAuthorization
+from app.utils.users_validation import UserValidation
 from app.utils.role_required_decorators import get_current_user
 from app.models import Trash
 from app.schemas.schemas import (
@@ -20,7 +31,7 @@ from app.schemas.schemas import (
     TrashedUserResponse,
 )
 from app.utils.hashing import hash_password
-from app.utils.celery_tasks import CeleryTasks
+from app.utils import celery_tasks
 
 users_route = APIRouter(prefix="/user")
 
@@ -245,6 +256,14 @@ async def batch_delete_users(
     return {"message": f"Successfully soft-deleted {len(users)} users"}
 
 
+def get_redis_client(request: Request) -> Redis:
+    redis_client = request.app.state.redis_client
+    if not redis_client:
+        raise RuntimeError("Redis client is not initialized!")
+
+    return redis_client
+
+
 # I will update this route later
 @users_route.get(
     "/view-trash",
@@ -255,28 +274,22 @@ async def batch_delete_users(
 async def view_trash(
     request: Request,
     token: str = Depends(oauth2_scheme),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    redis: Redis = Depends(get_redis_client),
 ):
-    """Fetch trashed users, using Redis cache if available."""
     try:
-        redis_client = request.app.state.redis_client
+        cached_trashed_users = await redis.get("cached_trashed_users")
+        # print(cached_trashed_users)
 
-        cached_trash_data = await redis_client.get("redis_trashed_users")
-        # print("---------------------------------------------")
-        # print(cached_trash_data)
-        if cached_trash_data:
-            return json.loads(cached_trash_data)
+        if cached_trashed_users:
+            return JSONResponse(content=json.loads(cached_trashed_users))
 
-        # Trigger Celery task to fetch and cache trashed users
-        task = CeleryTasks.fetch_trashed_users.apply_async()
-        background_tasks.add_task(CeleryTasks.fetch_trashed_users.apply_async)
-        return JSONResponse(
-            content={
-                "message": "Fetching trashed users in the background",
-                "task_id": task.id,
-            },
-            status_code=status.HTTP_202_ACCEPTED,
-        )
+        result = celery_tasks.fetch_trashed_users.delay()
+        data = result.get(timeout=10)
+        # print(data)
+
+        await redis.setex("cached_trashed_users", 600, json.dumps(data))
+
+        return data
 
     except Exception as e:
         raise HTTPException(
@@ -290,12 +303,21 @@ async def view_trash(
 async def restore_user(
     user_id: str,
     token: str = Depends(oauth2_scheme),
-    backgroud_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Trigger user restoration in the background."""
-    task = CeleryTasks.restore_user_from_trash_task.apply_async(args=[user_id])
+    user = await trash_collections.find_one({"original_user_id": user_id})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User doesn't exists."
+        )
 
-    return JSONResponse(content={"message": "Restoration started", "task_id": task.id})
+    await users_collection.update_one(
+        {"_id": ObjectId(user_id)}, {"$set": {"deleted_at": False}}
+    )
+    await trash_collections.delete_one(
+        {"original_user_id": user.get("original_user_id")}
+    )
+
+    return JSONResponse(content={"msg": "User restored successfully."})
 
 
 @users_route.delete("/trash/{user_id}", status_code=status.HTTP_200_OK)
