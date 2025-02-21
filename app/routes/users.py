@@ -31,7 +31,7 @@ from app.schemas.schemas import (
     TrashedUserResponse,
 )
 from app.utils.hashing import hash_password
-from app.utils import celery_tasks
+from app.utils.celery_tasks import CeleryTasks 
 
 users_route = APIRouter(prefix="/user")
 
@@ -283,7 +283,7 @@ async def view_trash(
         if cached_trashed_users:
             return JSONResponse(content=json.loads(cached_trashed_users))
 
-        result = celery_tasks.fetch_trashed_users.delay()
+        result = CeleryTasks.fetch_trashed_users.delay()
         data = result.get(timeout=10)
         # print(data)
 
@@ -303,21 +303,24 @@ async def view_trash(
 async def restore_user(
     user_id: str,
     token: str = Depends(oauth2_scheme),
+    redis:Redis = Depends(get_redis_client)
 ):
-    user = await trash_collections.find_one({"original_user_id": user_id})
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User doesn't exists."
+    # try:
+        cached_trashed_users = await redis.get("")
+        user = await trash_collections.find_one({"original_user_id": user_id})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User doesn't exists."
+            )
+
+        await users_collection.update_one(
+            {"_id": ObjectId(user_id)}, {"$set": {"deleted_at": False}}
+        )
+        await trash_collections.delete_one(
+            {"original_user_id": user.get("original_user_id")}
         )
 
-    await users_collection.update_one(
-        {"_id": ObjectId(user_id)}, {"$set": {"deleted_at": False}}
-    )
-    await trash_collections.delete_one(
-        {"original_user_id": user.get("original_user_id")}
-    )
-
-    return JSONResponse(content={"msg": "User restored successfully."})
+        return JSONResponse(content={"msg": "User restored successfully."})
 
 
 @users_route.delete("/trash/{user_id}", status_code=status.HTTP_200_OK)
